@@ -22,3 +22,6 @@ git push name_of_remote_repo name_of_branch
 To pull:
 
 git pull name_of_remote_repo name_of_branch
+
+
+I'm a goober
