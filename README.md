@@ -13,7 +13,7 @@ git checkout -b name_of_new_branch
 
 To push changes:
 
-git add <name of file or directory>
+git add name of file or directory
 
 git commit 'commit message'
 
