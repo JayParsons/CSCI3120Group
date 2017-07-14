@@ -1,11 +1,13 @@
-/* 
+/*
  * File: sws.c
  * Author: Alex Brodsky
  * Purpose: This file contains the implementation of a simple web server.
- *          It consists of two functions: main() which contains the main 
+ *          It consists of two functions: main() which contains the main
  *          loop accept client connections, and serve_client(), which
  *          processes each client request.
  */
+
+//I am adding a comment to test
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,11 +19,11 @@
 #define MAX_HTTP_SIZE 8192                 /* size of buffer to allocate */
 
 
-/* This function takes a file handle to a client, reads in the request, 
+/* This function takes a file handle to a client, reads in the request,
  *    parses the request, and sends back the requested file.  If the
  *    request is improper or the file is not available, the appropriate
  *    error is sent back.
- * Parameters: 
+ * Parameters:
  *             fd : the file descriptor to the client connection
  * Returns: None
  */
@@ -45,7 +47,7 @@ static void serve_client( int fd ) {
   if( read( fd, buffer, MAX_HTTP_SIZE ) <= 0 ) {    /* read req from client */
     perror( "Error while reading request" );
     abort();
-  } 
+  }
 
   /* standard requests are of the form
    *   GET /foo/bar/qux.html HTTP/1.1
@@ -55,7 +57,7 @@ static void serve_client( int fd ) {
   if( tmp && !strcmp( "GET", tmp ) ) {
     req = strtok_r( NULL, " ", &brk );
   }
- 
+
   if( !req ) {                                      /* is req valid? */
     len = sprintf( buffer, "HTTP/1.1 400 Bad request\n\n" );
     write( fd, buffer, len );                       /* if not, send err */
@@ -63,7 +65,7 @@ static void serve_client( int fd ) {
     req++;                                          /* skip leading / */
     fin = fopen( req, "r" );                        /* open file */
     if( !fin ) {                                    /* check if successful */
-      len = sprintf( buffer, "HTTP/1.1 404 File not found\n\n" );  
+      len = sprintf( buffer, "HTTP/1.1 404 File not found\n\n" );
       write( fd, buffer, len );                     /* if not, send err */
     } else {                                        /* if so, send file */
       len = sprintf( buffer, "HTTP/1.1 200 OK\n\n" );/* send success code */
@@ -92,7 +94,7 @@ static void serve_client( int fd ) {
  *    Then, it initializes, the network and enters the main loop.
  *    The main loop waits for a client (1 or more to connect, and then processes
  *    all clients by calling the seve_client() function for each one.
- * Parameters: 
+ * Parameters:
  *             argc : number of command line parameters (including program name
  *             argv : array of pointers to command line parameters
  * Returns: an integer status code, 0 for success, something else for error.
@@ -102,8 +104,8 @@ int main( int argc, char **argv ) {
   int fd;                                           /* client file descriptor */
 
   pthread_t tid[argv[3];
-  
-  /* check for and process parameters 
+
+  /* check for and process parameters
    */
   if( ( argc < 2 ) || ( sscanf( argv[1], "%d", &port ) < 1 ) ) {
     printf( "usage: sms <port>\n" );
