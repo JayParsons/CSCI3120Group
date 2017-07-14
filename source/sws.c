@@ -101,6 +101,8 @@ int main( int argc, char **argv ) {
   int port = -1;                                    /* server port # */
   int fd;                                           /* client file descriptor */
 
+  pthread_t tid[argv[3];
+  
   /* check for and process parameters 
    */
   if( ( argc < 2 ) || ( sscanf( argv[1], "%d", &port ) < 1 ) ) {
