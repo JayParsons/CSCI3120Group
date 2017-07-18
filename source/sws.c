@@ -103,7 +103,25 @@ int main( int argc, char **argv ) {
   int port = -1;                                    /* server port # */
   int fd;                                           /* client file descriptor */
 
-  pthread_t tid[argv[3];
+  pthread_t tid[argv[3]];
+
+  char sched[4] = argv[2];
+  while (strcmp(argv[2],"SJF")==0&&strcmp(argv[2],"RR")==0&&strcmp(argv[2],"MLFB")==0) {
+    printf("The scheduling algorithm inputted is not available\nPlease enter another\n");
+    scanf("%s\n", &sched);
+  }
+  if (strcmp(argv[2],"SJF")==0) {
+
+  }
+  else if (strcmp(argv[2],"RR")==0) {
+
+  }
+  else if (strcmp(argv[2],"MLFB")==0) {
+
+  }
+  else {
+
+  }
 
   /* check for and process parameters
    */
