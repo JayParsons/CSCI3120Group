@@ -1,0 +1,1 @@
+/usr/bin/cc  -g   CMakeFiles/CSCI3120Group_Owen.dir/main.c.o CMakeFiles/CSCI3120Group_Owen.dir/network.c.o CMakeFiles/CSCI3120Group_Owen.dir/Priority_Heap.c.o CMakeFiles/CSCI3120Group_Owen.dir/sws.c.o  -o CSCI3120Group_Owen 
