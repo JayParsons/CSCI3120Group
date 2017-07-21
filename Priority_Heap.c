@@ -15,21 +15,29 @@ int size(Heap *h) {
 }
 
 void init_heap(Heap *h){
-  h->head = malloc(sizeof(RCB)*4);
+  h = (Heap *)malloc(sizeof(Heap));
+  h->head = malloc(sizeof(RCB)*8);
+  
   h->size = 4;
   h->length = 0;
+
 }
 
 void addRCB(Heap *h,int priority,RCB *new_rcb) {
+  printf("Hello, World1!+%d\n",12);
   if(h->length+1 > h->size) { // if heap exceed
+    
     h->size = h->size*2;
     h->head = (RCB *) realloc(h->head, h->size * sizeof(RCB));
   }
+  
   *(h->head+h->length) = *new_rcb;
+  printf("Hello, World2!\n");
   h->length++;
   int index = h->length - 1;
   int pindex = (index - 1) / 2; // parent index
   RCB *parent = (h->head) + pindex;
+  
   while(index > 0 && new_rcb->priority > parent->priority) {
     h->head[index] = *parent;
     h->head[pindex] = *new_rcb;
