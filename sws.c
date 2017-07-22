@@ -27,7 +27,12 @@
 #define TOP_QUEUE_QUANTUM 8*1024           // MLFB top queue
 #define MID_QUEUE_QUANTUM 64*1024          // MLFB mid queue
 #define RR_QUANTUM 8*1024                  // RR or MLFB
-#define UNIFORM 32
+#define UNIFORM 32                         // priority
+
+#define TOPL 1
+#define MIDL 2
+#define RRL 3
+#define DEFAULT -1
 
 Heap *topHeap;
 Heap *midHeap;
@@ -46,10 +51,10 @@ void receive_init(int *number_of_threads);
 
 
 void create_RCB_init();
-RCB *create_RCB(int, FILE *, char *, char *fileName);
+RCB *create_RCB(int, FILE *, char *fileName);
 
 void mutex_lock_enqueue(Heap *,RCB *);
-
+RCB *mutex_lock_dequeue();
 
 void *receive(void *);// a.k.a worker function,  the function that handles all receive jobs, parameter is the interface
 
@@ -123,7 +128,7 @@ static void *serve_client( void *fdp ) {
       
       
       
-      RCB *new_RCB = create_RCB(fd,fin, buffer, fileName);
+      RCB *new_RCB = create_RCB(fd,fin, fileName);
       mutex_lock_enqueue(topHeap, new_RCB);
       
       //TODO: enqueue now do create RCB
@@ -163,7 +168,7 @@ int main( int argc, char **argv ) {
   
   sem_init(&semaphore, 0, 0);         // initialize a semaphor for work when network accept
   int num_threads = 0;
-  char alg_in[4];
+  char alg_in[5];
   
   
   /* check for and process parameters */
@@ -177,6 +182,7 @@ int main( int argc, char **argv ) {
   }
   
   algorithm_init(port,alg_in,num_threads);
+  
   network_init( port );                             /* init network module */
   printf("\nServer all Green! //initialization complete");
   printf("\nStart waiting for clients request\n\n");
@@ -198,21 +204,35 @@ int main( int argc, char **argv ) {
 
 
 void algorithm_init(int port, char *alg_in, int num_threads) {
-  if( strcmp(alg_in,"SJF") || strcmp(alg_in,"sjf") ){
+  printf("%s\n",alg_in);
+  
+  if( strcmp(alg_in,"SJF") == 0 || strcmp(alg_in,"sjf") == 0){
+    
     alg_using = SJF;
+    topHeap = malloc(sizeof(Heap));
     init_heap(topHeap);
-  } else if( strcmp(alg_in,"RR") || strcmp(alg_in,"rr") ){
+  } else if( strcmp(alg_in,"RR") == 0 || strcmp(alg_in,"rr") == 0 ){
+    
     alg_using = RR;
+    rrHeap = malloc(sizeof(Heap));
     init_heap(rrHeap);
-  }else if( strcmp(alg_in,"MLFB") || strcmp(alg_in,"mlfb")){
+  }else if( strcmp(alg_in,"MLFB") == 0 || strcmp(alg_in,"mlfb") == 0){
+    
     alg_using = MLFB;
+    topHeap = malloc(sizeof(Heap));
+    midHeap = malloc(sizeof(Heap));
+    rrHeap = malloc(sizeof(Heap));
+    
+    
     init_heap(topHeap);
     init_heap(midHeap);
     init_heap(rrHeap);
   }else {
+    
     printf("What algorithm is that?");
     exit(0);
   }
+  
   printf("Using algorithm ");
   if(alg_using IS SJF)  printf("Shortest Job First");
   if(alg_using IS MLFB)printf("Multilevel Feedback");
@@ -239,14 +259,92 @@ void *receive(void *def) { // worker function
   // including local memory checking
   char *buffer = malloc(sizeof(char) * MAX_HTTP_SIZE);
   memset(buffer, 0, sizeof(char) * MAX_HTTP_SIZE);
-  //rcb *popped_rcb;
+
   if (!buffer) {
     perror("Error while allocating memory");
     abort();
   }
+  
+  
+  
   // initialization successfully to this stage, ready
   for(;;) {
+    
+    RCB *popRCB = NULL;
+    
+    int level = DEFAULT; // next level to push
+    int quantum = 0;
+    int length = 0; // length to
+    Heap *nhtp = NULL; // next hep to push
+    
+    
+    //printf("Semopare calling %d\n",semaphore);
     sem_wait(&semaphore); // wait until the there is a job assigned 
+    // design algorithm consumption
+    
+    if(alg_using IS SJF) {
+      // If we are using SJF, then means the heap is in use is "top"
+      
+     // popRCB = mutex_lock_dequeue();
+      
+      
+      
+      
+    } else if (alg_using IS RR ) {
+     // popRCB = mutex_lock_dequeue();
+      
+      //printf("RR");
+      
+    } else {
+      
+      //printf("MLFB");
+      
+      
+      
+      if(topHeap->length == 0 && midHeap->length == 0 && rrHeap->length == 0) continue;
+      // track the level
+      if(topHeap->length  > 0 ) {
+        //level = TOP;
+        quantum = TOP_QUEUE_QUANTUM;
+        nhtp = midHeap;
+      } else if (midHeap->length  > 0 ) {
+        //level = MID;
+        quantum = MID_QUEUE_QUANTUM;
+        nhtp = rrHeap;
+      } else {
+        //level = RR;
+        quantum = RR_QUANTUM;
+        nhtp = rrHeap;
+      }
+      //printf("HaHaHaHaHaHaHaHaHaHa\n");
+      //exit(0);
+      popRCB = mutex_lock_dequeue();
+      
+      
+      if(popRCB == NULL) continue;
+      
+      
+      length = (popRCB->rcb_data_remain>quantum) ? quantum : popRCB->rcb_data_remain;
+     // printf("Seg Fault1234\n");
+      
+      fread(buffer, 1, length, popRCB->rcb_file);
+      
+      popRCB->rcb_data_remain -= length;
+      if(popRCB->rcb_data_remain == 0) {
+        //free(popRCB);
+        //printf("Seg Fault5678\n");
+        continue;
+      }
+      
+      // set the quantum in rcb
+      
+      mutex_lock_enqueue(nhtp,popRCB);
+      
+    }
+    
+    
+    
+  
   }
   
   
@@ -270,7 +368,7 @@ void create_RCB_init(){
 // The nserve_client the in s_c create RCB's
 
 
-RCB *create_RCB(int fd,FILE *inputFile, char *buffer,char *fileName) {
+RCB *create_RCB(int fd,FILE *inputFile,char *fileName) {
   
   RCB *new_RCB = (RCB *)malloc(sizeof(RCB));
   new_RCB->file_name = fileName;
@@ -283,13 +381,14 @@ RCB *create_RCB(int fd,FILE *inputFile, char *buffer,char *fileName) {
   new_RCB->rcb_data_remain = length;
   
   if(alg_using IS SJF){
-    new_RCB->quantum = length;
+    new_RCB->quantum = length; // may remove
     new_RCB->priority = length;
+    
   } else if (alg_using IS RR) {
-    new_RCB->quantum = RR_QUANTUM;
+    new_RCB->quantum = RR_QUANTUM; // may remove
     new_RCB->priority = UNIFORM;
   } else if (alg_using IS MLFB) {
-    new_RCB->quantum = TOP_QUEUE_QUANTUM;
+    new_RCB->quantum = TOP_QUEUE_QUANTUM; // may remove
     new_RCB->priority = UNIFORM;
   }
   return new_RCB;
@@ -307,25 +406,29 @@ void mutex_lock_enqueue(Heap *h, RCB *c) {
   pthread_mutex_unlock(&mutex);
   sem_post(&semaphore); // here is a thread can start in threads
 }
+
 RCB *mutex_lock_dequeue() {
   pthread_mutex_lock(&mutex);
-  
-  RCB *ret ;//= pop(h);
+ // printf("Seg Fault mutex\n");
+  RCB *ret = NULL;//= pop(h);
   
   if(alg_using IS SJF) {
     ret = pop(topHeap);
   } else if (alg_using IS RR) {
     ret = pop(rrHeap);
   } else if (alg_using IS MLFB) {
-    if( size(topHeap) != 0 ) {
+    if( topHeap->length != 0 ) {
       ret = pop(topHeap);
-    } else if ( size(midHeap) != 0 ){
+    } else if ( midHeap->length != 0 ){
       ret = pop(midHeap);
     } else {
       ret = pop(rrHeap);
     }
   }
+ // printf("Seg Fault mutex2 ");
+ // printf("%d\n",ret->priority);
   pthread_mutex_unlock(&mutex);
+//   printf("Seg Fault1234\n");
   return ret;
 }
 

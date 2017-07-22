@@ -14,10 +14,10 @@ typedef struct {
   int rcb_fd;
   FILE *rcb_file;
   int rcb_data_remain;
-  int quantum;
+  int quantum; // may remove
   int priority;
   char *file_name;
-  
+  int *level; // may change
 }RCB;
 
 typedef struct {
