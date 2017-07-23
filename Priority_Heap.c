@@ -100,10 +100,14 @@ RCB *pop(Heap *h){
 }
 
 void enumerate(Heap *h) {
+  if(h == NULL ) return;
+  if(h->length == 0) return;
+  
   for (int i = 0;i<h->length;i++) {
-    printf("%d ",(h->head+i)->priority);
+    printf("%d ",(h->head+i)->rcb_seq_num);
   }
   printf("\n");
+  
 }
 
 RCB *cpy(RCB *o){

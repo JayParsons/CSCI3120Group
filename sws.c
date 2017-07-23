@@ -44,7 +44,7 @@ int seq_num_c = 0; // cumulative sequence number
 
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-sem_t semaphore;
+sem_t *semaphore;
 
 void algorithm_init(int,char *, int);
 void receive_init(int *number_of_threads);
@@ -58,7 +58,8 @@ RCB *mutex_lock_dequeue();
 
 void *receive(void *);// a.k.a worker function,  the function that handles all receive jobs, parameter is the interface
 
-
+void *serve_client_init(void *);
+void *serve_client();
 
 
 /* This function takes a file handle to a client, reads in the request,
@@ -70,28 +71,41 @@ void *receive(void *);// a.k.a worker function,  the function that handles all r
  * Returns: None
  */
 
-static void *serve_client( void *fdp ) {
+
+
+/*
+ *
+ * Need to seperate the initialization from real process
+ *
+ *
+ */
+
+void *serve_client_init( void *fdp ) {
+  
+  //sem_wait(semaphore); // wait until the there is a job assigned
   int fd = *(int *)fdp;
-  static char *buffer;                              /* request buffer */
+  char *buffer = NULL;                              /* request buffer */
   char *req = NULL;                                 /* ptr to req file */
   char *brk;                                        /* state used by strtok */
   char *tmp;                                        /* error checking ptr */
   FILE *fin;                                        /* input file handle */
   int len;                                          /* length of data read */
-  
+  printf("Semopare stop - 1\n");
   if( !buffer ) {                                   /* 1st time, alloc buffer */
     buffer = malloc( MAX_HTTP_SIZE );
+    memset( buffer, 0, MAX_HTTP_SIZE );
     if( !buffer ) {                                 /* error check */
       perror( "Error while allocating memory" );
       abort();
     }
   }
   
-  memset( buffer, 0, MAX_HTTP_SIZE );
+  
   if( read( fd, buffer, MAX_HTTP_SIZE ) <= 0 ) {    /* read req from client */
     perror( "Error while reading request" );
     abort();
   }
+  
   
   /* standard requests are of the form
    *   GET /foo/bar/qux.html HTTP/1.1
@@ -105,52 +119,220 @@ static void *serve_client( void *fdp ) {
   if( !req ) {                                      /* is req valid? */
     len = sprintf( buffer, "HTTP/1.1 400 Bad request\n\n" );
     write( fd, buffer, len );                       /* if not, send err */
+    close(fd);
   } else {                                          /* if so, open file */
     req++;                                          /* skip leading / */
     
-    
     printf("Request for file '%s' admitted.\n", req); // required T2 3)
-    
     
     fin = fopen( req, "r" );                        /* open file */
     char fileName[20];
     memset(fileName, '\0', sizeof(fileName));
-    
+  //  printf("Finding error that not write to clients 1 '%s' admitted.\n", req);
     if( !fin ) {                                    /* check if successful */
       len = sprintf( buffer, "HTTP/1.1 404 File not found\n\n" );
       write( fd, buffer, len );                     /* if not, send err */
       close(fd);
     } else {                                        /* if so, send file */
+   //   pthread_mutex_lock(&mutex);
+      
+   //   printf("Finding error that not write to clients 2 '%s' admitted.\n", req);
       len = sprintf( buffer, "HTTP/1.1 200 OK\n\n" );/* send success code */
+    //  printf("Finding error that not write to clients 3 '%s' admitted.\n", req);
       write( fd, buffer, len );
-      
-      
-      
+     // printf("Finding error that not write to clients 4 '%s' admitted.\n", req);
+      //fflush(stdout);
+    //  pthread_mutex_unlock(&mutex);
       
       
       RCB *new_RCB = create_RCB(fd,fin, fileName);
-      mutex_lock_enqueue(topHeap, new_RCB);
       
-      //TODO: enqueue now do create RCB
+      if (alg_using IS RR)  mutex_lock_enqueue(rrHeap, new_RCB);
+      else                  mutex_lock_enqueue(topHeap, new_RCB);
       
-      do {                                          /* loop, read & send file */
-        len = fread( buffer, 1, MAX_HTTP_SIZE, fin );  /* read file chunk */
-        if( len < 0 ) {                             /* check for errors */
-          perror( "Error while writing to client" );
-        } else if( len > 0 ) {                      /* if none, send chunk */
-          len = write( fd, buffer, len );
-          if( len < 1 ) {                           /* check for errors */
-            perror( "Error while writing to client" );
-          }
-        }
-      } while( len == MAX_HTTP_SIZE );              /* the last chunk < 8192 */
-      fclose( fin );
     }
   }
-  close( fd );                                     /* close client connectuin*/
+  free(buffer);
+  printf("I can go here\n");
+  
   return 0;
 }
 
+void *serve_client() {
+  //sem_wait(semaphore);
+  for(;;){
+    printf("Semopare stop\n");
+    sem_wait(semaphore); // wait until the there is a job assigned
+    pthread_mutex_lock(&mutex);
+    
+
+    
+    printf("Enu1\n");
+    if(topHeap!= NULL)
+      enumerate(topHeap);
+    printf("Enu2\n");
+    if(midHeap!= NULL)
+      enumerate(midHeap);
+    printf("Enu3\n");
+    if(rrHeap!= NULL)
+      enumerate(rrHeap);
+    
+    
+    pthread_mutex_unlock(&mutex);
+    
+  }
+}
+
+
+void receive_init(int *num_threads) {
+  pthread_t CCT[*num_threads]; // client-connect thread
+  for (int i = 0; i < *num_threads; i++)
+    pthread_create(&CCT[i], NULL, serve_client, NULL);
+  
+  create_RCB_init();
+  
+  for (int i = 0; i < *num_threads; i++)
+    pthread_join(CCT[i], NULL); // for a successful join back of all threads
+}
+
+
+void create_RCB_init(){
+  
+  int fd = 0;
+  
+  for(;;) {
+    
+    network_wait();
+    for (fd = network_open(); fd >= 0; fd = network_open()) {
+      pthread_t init_thread;
+      
+      int *fdp = (int *) malloc(sizeof(int));
+      *fdp = fd;
+      printf("fdp: %d\n",*fdp);
+      pthread_create(&init_thread, NULL, serve_client_init, (void *)fdp);
+    }
+  }
+}
+
+
+
+
+
+
+
+
+
+/*
+     Error Shall not enter
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ */
+
+RCB *create_RCB(int fd,FILE *inputFile,char *fileName) {
+  
+  RCB *new_RCB = (RCB *)malloc(sizeof(RCB));
+  new_RCB->file_name = fileName;
+  new_RCB->rcb_fd = fd;
+  new_RCB->rcb_file = inputFile;
+  new_RCB->rcb_seq_num = seq_num_c++;
+  fseek(new_RCB->rcb_file, 0, SEEK_END);
+  int length = (int)ftell(new_RCB->rcb_file); //get file size
+  rewind(new_RCB->rcb_file);
+  new_RCB->rcb_data_remain = length;
+  
+  if(alg_using IS SJF){
+    new_RCB->quantum = length; // may remove
+    new_RCB->priority = length;
+    
+  } else if (alg_using IS RR) {
+    new_RCB->quantum = RR_QUANTUM; // may remove
+    new_RCB->priority = UNIFORM;
+  } else if (alg_using IS MLFB) {
+    new_RCB->quantum = TOP_QUEUE_QUANTUM; // may remove
+    new_RCB->priority = UNIFORM;
+  }
+  return new_RCB;
+  
+}
 
 /* This function is where the program starts running.
  *    The function first parses its command line parameters to determine port #
@@ -166,7 +348,8 @@ int main( int argc, char **argv ) {
   int port = -1;                                    /* server port # */
   //int fd;       // not needed                     /* client file descriptor */
   
-  sem_init(&semaphore, 0, 0);         // initialize a semaphor for work when network accept
+  //sem_open(&semaphore, 0, 0);         // initialize a semaphor for work when network accept
+  semaphore = sem_open("/semaphore", O_CREAT, 0644, 1);
   int num_threads = 0;
   char alg_in[5];
   
@@ -202,6 +385,39 @@ int main( int argc, char **argv ) {
   return EXIT_SUCCESS; // return status
 }
 
+void mutex_lock_enqueue(Heap *h, RCB *c) {
+  pthread_mutex_lock(&mutex);
+  
+  addRCB(h, c->priority, c);
+  
+  pthread_mutex_unlock(&mutex);
+  sem_post(semaphore); // here is a thread can start in threads
+}
+
+RCB *mutex_lock_dequeue() {
+  pthread_mutex_lock(&mutex);
+ // printf("Seg Fault mutex\n");
+  RCB *ret = NULL;//= pop(h);
+  
+  if(alg_using IS SJF) {
+    ret = pop(topHeap);
+  } else if (alg_using IS RR) {
+    ret = pop(rrHeap);
+  } else if (alg_using IS MLFB) {
+    if( topHeap->length != 0 ) {
+      ret = pop(topHeap);
+    } else if ( midHeap->length != 0 ){
+      ret = pop(midHeap);
+    } else {
+      ret = pop(rrHeap);
+    }
+  }
+ // printf("Seg Fault mutex2 ");
+ // printf("%d\n",ret->priority);
+  pthread_mutex_unlock(&mutex);
+//   printf("Seg Fault1234\n");
+  return ret;
+}
 
 void algorithm_init(int port, char *alg_in, int num_threads) {
   printf("%s\n",alg_in);
@@ -241,196 +457,4 @@ void algorithm_init(int port, char *alg_in, int num_threads) {
   printf(" on port: %d, with %d threads using\n",port,num_threads);
   
 }
-
-void receive_init(int *num_threads) {
-  pthread_t CCT[*num_threads]; // client-connect thread
-  for (int i = 0; i < *num_threads; i++)
-    pthread_create(&CCT[i], NULL, receive, NULL);
-  
-  create_RCB_init();
-  
-  for (int i = 0; i < *num_threads; i++)
-    pthread_join(CCT[i], NULL); // for a successful join back of all threads
-}
-
-
-void *receive(void *def) { // worker function
-  // initializing resources before real receive files
-  // including local memory checking
-  char *buffer = malloc(sizeof(char) * MAX_HTTP_SIZE);
-  memset(buffer, 0, sizeof(char) * MAX_HTTP_SIZE);
-
-  if (!buffer) {
-    perror("Error while allocating memory");
-    abort();
-  }
-  
-  
-  
-  // initialization successfully to this stage, ready
-  for(;;) {
-    
-    RCB *popRCB = NULL;
-    
-    int level = DEFAULT; // next level to push
-    int quantum = 0;
-    int length = 0; // length to
-    Heap *nhtp = NULL; // next hep to push
-    
-    
-    //printf("Semopare calling %d\n",semaphore);
-    sem_wait(&semaphore); // wait until the there is a job assigned 
-    // design algorithm consumption
-    
-    if(alg_using IS SJF) {
-      // If we are using SJF, then means the heap is in use is "top"
-      
-     // popRCB = mutex_lock_dequeue();
-      
-      
-      
-      
-    } else if (alg_using IS RR ) {
-     // popRCB = mutex_lock_dequeue();
-      
-      //printf("RR");
-      
-    } else {
-      
-      //printf("MLFB");
-      
-      
-      
-      if(topHeap->length == 0 && midHeap->length == 0 && rrHeap->length == 0) continue;
-      // track the level
-      if(topHeap->length  > 0 ) {
-        //level = TOP;
-        quantum = TOP_QUEUE_QUANTUM;
-        nhtp = midHeap;
-      } else if (midHeap->length  > 0 ) {
-        //level = MID;
-        quantum = MID_QUEUE_QUANTUM;
-        nhtp = rrHeap;
-      } else {
-        //level = RR;
-        quantum = RR_QUANTUM;
-        nhtp = rrHeap;
-      }
-      //printf("HaHaHaHaHaHaHaHaHaHa\n");
-      //exit(0);
-      popRCB = mutex_lock_dequeue();
-      
-      
-      if(popRCB == NULL) continue;
-      
-      
-      length = (popRCB->rcb_data_remain>quantum) ? quantum : popRCB->rcb_data_remain;
-     // printf("Seg Fault1234\n");
-      
-      fread(buffer, 1, length, popRCB->rcb_file);
-      
-      popRCB->rcb_data_remain -= length;
-      if(popRCB->rcb_data_remain == 0) {
-        //free(popRCB);
-        //printf("Seg Fault5678\n");
-        continue;
-      }
-      
-      // set the quantum in rcb
-      
-      mutex_lock_enqueue(nhtp,popRCB);
-      
-    }
-    
-    
-    
-  
-  }
-  
-  
-  
-}
-
-
-void create_RCB_init(){
-  int fd = 0;
-  for(;;) {
-    network_wait();
-    for (fd = network_open(); fd >= 0; fd = network_open()) {
-      pthread_t init_thread;
-      int *fdp = (int *) malloc(sizeof(int));
-      *fdp = fd;
-      pthread_create(&init_thread, NULL, serve_client, (void *)fdp);
-    }
-  }
-}
-
-// The nserve_client the in s_c create RCB's
-
-
-RCB *create_RCB(int fd,FILE *inputFile,char *fileName) {
-  
-  RCB *new_RCB = (RCB *)malloc(sizeof(RCB));
-  new_RCB->file_name = fileName;
-  new_RCB->rcb_fd = fd;
-  new_RCB->rcb_file = inputFile;
-  new_RCB->rcb_seq_num = seq_num_c++;
-  fseek(new_RCB->rcb_file, 0, SEEK_END);
-  int length = (int)ftell(new_RCB->rcb_file); //get file size
-  rewind(new_RCB->rcb_file);
-  new_RCB->rcb_data_remain = length;
-  
-  if(alg_using IS SJF){
-    new_RCB->quantum = length; // may remove
-    new_RCB->priority = length;
-    
-  } else if (alg_using IS RR) {
-    new_RCB->quantum = RR_QUANTUM; // may remove
-    new_RCB->priority = UNIFORM;
-  } else if (alg_using IS MLFB) {
-    new_RCB->quantum = TOP_QUEUE_QUANTUM; // may remove
-    new_RCB->priority = UNIFORM;
-  }
-  return new_RCB;
-  
-}
-
-
-
-
-void mutex_lock_enqueue(Heap *h, RCB *c) {
-  pthread_mutex_lock(&mutex);
-  
-  addRCB(h, c->priority, c);
-  
-  pthread_mutex_unlock(&mutex);
-  sem_post(&semaphore); // here is a thread can start in threads
-}
-
-RCB *mutex_lock_dequeue() {
-  pthread_mutex_lock(&mutex);
- // printf("Seg Fault mutex\n");
-  RCB *ret = NULL;//= pop(h);
-  
-  if(alg_using IS SJF) {
-    ret = pop(topHeap);
-  } else if (alg_using IS RR) {
-    ret = pop(rrHeap);
-  } else if (alg_using IS MLFB) {
-    if( topHeap->length != 0 ) {
-      ret = pop(topHeap);
-    } else if ( midHeap->length != 0 ){
-      ret = pop(midHeap);
-    } else {
-      ret = pop(rrHeap);
-    }
-  }
- // printf("Seg Fault mutex2 ");
- // printf("%d\n",ret->priority);
-  pthread_mutex_unlock(&mutex);
-//   printf("Seg Fault1234\n");
-  return ret;
-}
-
-
 
