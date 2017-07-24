@@ -51,7 +51,7 @@ void addRCB(Heap *h,int priority,RCB *new_rcb) {
 }
 
 RCB *pop(Heap *h){
-  printf("\n\nEnu\n");
+  //printf("\n\nEnu\n");
   //enumerate(h);
   
   if(h->length == 0) {
@@ -64,7 +64,7 @@ RCB *pop(Heap *h){
   RCB *ret_rcb = cpy( h->head);
   RCB item = h->head[h->length-1];
   (h->length)--;
-  printf("HHERERERERERRERRERERREERRERRERERERERERERRERERRR%d\n",h->length);
+  //printf("HHERERERERERRERRERERREERRERRERERERERERERRERERRR%d\n",h->length);
   if(h->length  == 0) {
     //h->head = NULL;
     
@@ -106,7 +106,7 @@ RCB *pop(Heap *h){
     rIndex = index * 2 + 2;
   }
   
-  printf("Remain: %d\n",h->length);
+  //printf("Remain: %d\n",h->length);
   
   return ret_rcb;
 }
