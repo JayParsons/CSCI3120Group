@@ -90,7 +90,7 @@ void *serve_client_init( void *fdp ) {
   char *tmp;                                        /* error checking ptr */
   FILE *fin;                                        /* input file handle */
   int len;                                          /* length of data read */
-  printf("Semopare stop - 1\n");
+  //printf("Semopare stop - 1\n");
   if( !buffer ) {                                   /* 1st time, alloc buffer */
     buffer = malloc( MAX_HTTP_SIZE );
     memset( buffer, 0, MAX_HTTP_SIZE );
@@ -105,7 +105,6 @@ void *serve_client_init( void *fdp ) {
     perror( "Error while reading request" );
     abort();
   }
-  
   
   /* standard requests are of the form
    *   GET /foo/bar/qux.html HTTP/1.1
@@ -124,61 +123,78 @@ void *serve_client_init( void *fdp ) {
     req++;                                          /* skip leading / */
     
     printf("Request for file '%s' admitted.\n", req); // required T2 3)
-    
+    printf("CK1\n");
     fin = fopen( req, "r" );                        /* open file */
     char fileName[20];
     memset(fileName, '\0', sizeof(fileName));
+    
+   // strcpy(fileName,req);
   //  printf("Finding error that not write to clients 1 '%s' admitted.\n", req);
     if( !fin ) {                                    /* check if successful */
       len = sprintf( buffer, "HTTP/1.1 404 File not found\n\n" );
       write( fd, buffer, len );                     /* if not, send err */
       close(fd);
     } else {                                        /* if so, send file */
-   //   pthread_mutex_lock(&mutex);
-      
-   //   printf("Finding error that not write to clients 2 '%s' admitted.\n", req);
+     
       len = sprintf( buffer, "HTTP/1.1 200 OK\n\n" );/* send success code */
-    //  printf("Finding error that not write to clients 3 '%s' admitted.\n", req);
-      write( fd, buffer, len );
-     // printf("Finding error that not write to clients 4 '%s' admitted.\n", req);
-      //fflush(stdout);
-    //  pthread_mutex_unlock(&mutex);
       
+      write( fd, buffer, len );
+      //fflush(fdp);
       
       RCB *new_RCB = create_RCB(fd,fin, fileName);
       
-      if (alg_using IS RR)  mutex_lock_enqueue(rrHeap, new_RCB);
-      else                  mutex_lock_enqueue(topHeap, new_RCB);
+      if (alg_using IS RR) {  mutex_lock_enqueue(rrHeap, new_RCB);}
+      else                 {printf("CK2\n");mutex_lock_enqueue(topHeap, new_RCB);printf("CK8\n");}
       
     }
   }
-  free(buffer);
-  printf("I can go here\n");
   
+  free(buffer);
+  
+  //pthread_cancel();
   return 0;
 }
 
 void *serve_client() {
-  //sem_wait(semaphore);
+  char *buffer = malloc(sizeof(char) * MAX_HTTP_SIZE);
+  memset(buffer, 0, sizeof(char) * MAX_HTTP_SIZE);
+  RCB *popped_rcb;
+  if (!buffer) {
+    perror("Error while allocating memory");
+    abort();
+  }
   for(;;){
-    printf("Semopare stop\n");
+   // printf("123\n");
+   // printf("Semopare stop\n");
+   // printf("Arrrrrrrrival\n");
     sem_wait(semaphore); // wait until the there is a job assigned
-    pthread_mutex_lock(&mutex);
-    
 
-    
+    //pthread_mutex_lock(&mutex);
+ /*
     printf("Enu1\n");
-    if(topHeap!= NULL)
+    if(topHeap != NULL)
       enumerate(topHeap);
     printf("Enu2\n");
-    if(midHeap!= NULL)
+    if(midHeap != NULL)
       enumerate(midHeap);
     printf("Enu3\n");
-    if(rrHeap!= NULL)
+    if(rrHeap != NULL)
       enumerate(rrHeap);
+    */
+    //printf("Seg Fault\n");
     
     
-    pthread_mutex_unlock(&mutex);
+    
+    
+    popped_rcb = mutex_lock_dequeue();
+    printf("%d Priority!!\n",popped_rcb->priority);
+    
+    
+   // pthread_mutex_unlock(&mutex);
+    
+    
+    
+    
     
   }
 }
@@ -201,16 +217,20 @@ void create_RCB_init(){
   int fd = 0;
   
   for(;;) {
-    
+   // pthread_mutex_lock(&mutex);
+    printf("Arrive Fault 1\n");
     network_wait();
     for (fd = network_open(); fd >= 0; fd = network_open()) {
-      pthread_t init_thread;
+      pthread_t t ;
       
       int *fdp = (int *) malloc(sizeof(int));
       *fdp = fd;
-      printf("fdp: %d\n",*fdp);
-      pthread_create(&init_thread, NULL, serve_client_init, (void *)fdp);
+      //printf("fdp: %d\n",*fdp);
+      pthread_create(&t, NULL, serve_client_init, (void *)fdp);
+      printf("Arrive Fault 2\n");
+      pthread_join(t,NULL);
     }
+  //  pthread_mutex_unlock(&mutex);
   }
 }
 
@@ -386,19 +406,23 @@ int main( int argc, char **argv ) {
 }
 
 void mutex_lock_enqueue(Heap *h, RCB *c) {
+  printf("CK3\n");
   pthread_mutex_lock(&mutex);
-  
+  printf("CK4\n");
+  //printf("123\nI can go here\n %d\n",c->priority);
+  printf("%d\n\n",h->length);
+  printf("%d 23\n\n",c->priority);
   addRCB(h, c->priority, c);
-  
+  printf("CK5\n");
   pthread_mutex_unlock(&mutex);
   sem_post(semaphore); // here is a thread can start in threads
+  
 }
 
 RCB *mutex_lock_dequeue() {
   pthread_mutex_lock(&mutex);
- // printf("Seg Fault mutex\n");
   RCB *ret = NULL;//= pop(h);
-  
+  printf("Pop CK1\n");
   if(alg_using IS SJF) {
     ret = pop(topHeap);
   } else if (alg_using IS RR) {
@@ -412,6 +436,8 @@ RCB *mutex_lock_dequeue() {
       ret = pop(rrHeap);
     }
   }
+  printf("Pop CK2\n");
+  
  // printf("Seg Fault mutex2 ");
  // printf("%d\n",ret->priority);
   pthread_mutex_unlock(&mutex);

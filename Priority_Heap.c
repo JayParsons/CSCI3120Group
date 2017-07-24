@@ -24,14 +24,18 @@ void init_heap(Heap *h){
 }
 
 void addRCB(Heap *h,int priority,RCB *new_rcb) {
+  
   if(h->length+1 > h->size) { // if heap exceed
     
     h->size = h->size*2;
     h->head = (RCB *) realloc(h->head, h->size * sizeof(RCB));
   }
+ // printf("Hmmpppp\n");
+  //printf("Hmm%d\n",h->head[h->length].priority);
   
-  *(h->head+h->length) = *new_rcb;
-  h->length++;
+  h->head[h->length] = *cpy(new_rcb);
+  //printf("Hmm\n");
+  h->length += 1;
   int index = h->length - 1;
   int pindex = (index - 1) / 2; // parent index
   RCB *parent = (h->head) + pindex;
@@ -47,17 +51,22 @@ void addRCB(Heap *h,int priority,RCB *new_rcb) {
 }
 
 RCB *pop(Heap *h){
+  printf("\n\nEnu\n");
+  //enumerate(h);
+  
   if(h->length == 0) {
     printf("Error, empty heap, return null\n");
     fflush(stdout);
     //fflush();
     return NULL;
   }
+  
   RCB *ret_rcb = cpy( h->head);
   RCB item = h->head[h->length-1];
   (h->length)--;
+  printf("HHERERERERERRERRERERREERRERRERERERERERERRERERRR%d\n",h->length);
   if(h->length  == 0) {
-    h->head = NULL;
+    //h->head = NULL;
     
     return ret_rcb;
   }
@@ -69,6 +78,7 @@ RCB *pop(Heap *h){
   index = 0;
   lIndex = index * 2 + 1;
   rIndex = index * 2 + 2;
+  
   while(!found) {
     if(lIndex < h->length && rIndex < h->length) {
       if(((h->head)+lIndex)->priority > ((h->head)+rIndex)->priority){
@@ -96,6 +106,8 @@ RCB *pop(Heap *h){
     rIndex = index * 2 + 2;
   }
   
+  printf("Remain: %d\n",h->length);
+  
   return ret_rcb;
 }
 
@@ -104,7 +116,7 @@ void enumerate(Heap *h) {
   if(h->length == 0) return;
   
   for (int i = 0;i<h->length;i++) {
-    printf("%d ",(h->head+i)->rcb_seq_num);
+    printf("%d ",(h->head+i)->priority);
   }
   printf("\n");
   

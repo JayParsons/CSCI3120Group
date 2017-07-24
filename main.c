@@ -14,7 +14,7 @@ int main() {
   // insert code here...
   
   
-  Heap *a = NULL;
+  Heap *a = (Heap *)malloc(sizeof(Heap));
   //a = malloc(sizeof(Heap));
   init_heap(a);
   RCB *here;
@@ -41,6 +41,9 @@ int main() {
   }
   printf("\n");
   
+  
+  
+  RCB *ret = pop(a);
   
   return 0;
 }
