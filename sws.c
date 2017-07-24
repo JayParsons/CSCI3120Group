@@ -74,13 +74,6 @@ void *serve_client();
 
 
 
-/*
- *
- * Need to seperate the initialization from real process
- *
- *
- */
-
 void *serve_client_init( void *fdp ) {
   
   //sem_wait(semaphore); // wait until the there is a job assigned
@@ -99,7 +92,6 @@ void *serve_client_init( void *fdp ) {
   int length;
   
   
-  //printf("Semopare stop - 1\n");
   if( !buffer ) {                                   /* 1st time, alloc buffer */
     buffer = malloc( MAX_HTTP_SIZE );
     memset( buffer, 0, MAX_HTTP_SIZE );
@@ -133,17 +125,13 @@ void *serve_client_init( void *fdp ) {
     
     printf("Request for file '%s' admitted.\n", req); // required T2 3)
    
-    //printf("CK1\n");
-    //memset(fileName,0,MAX_HTTP_SIZE);
+    
     length = sprintf(fileName,"%s",req);
     //write(popped_rcb->rcb_fd,fileName,length);
     strcpy(fileName,req);
     
     fin = fopen( req, "r" );                        /* open file */
-    //
-   // memset(fileName, 0, sizeof(fileName));
     
-  //  printf("Finding error that not write to clients 1 '%s' admitted.\n", req);
     if( !fin ) {                                    /* check if successful */
       len = sprintf( buffer, "HTTP/1.1 404 File not found\n\n" );
       write( fd, buffer, len );                     /* if not, send err */
@@ -157,20 +145,14 @@ void *serve_client_init( void *fdp ) {
       
       RCB *new_RCB = create_RCB(fd,fin, fileName);
       
-      if (alg_using IS RR) {
+      if (alg_using IS RR)
         mutex_lock_enqueue(rrHeap, new_RCB);
-      } else                 //{printf("CK2\n");
-        mutex_lock_enqueue(topHeap, new_RCB);//printf("CK8\n");}
-      //printf("Technique\n");
+      else
+        mutex_lock_enqueue(topHeap, new_RCB);
     }
-    
   }
-  //pthread_mutex_lock(&mutex);
-  //printf();
   free(fileName);
   free(buffer);
- // pthread_mutex_unlock(&mutex);
-  //pthread_cancel();
   return 0;
 }
 
@@ -187,31 +169,19 @@ void *serve_client() {
     abort();
   }
   for(;;){
-   // printf("123\n");
-    printf("Semopare stop\n");
-   // printf("Arrrrrrrrival\n");
     sem_wait(semaphore); // wait until the there is a job assigned
 
-    //pthread_mutex_lock(&mutex);
- /*
-    printf("Enu1\n");
-    if(topHeap != NULL)
-      enumerate(topHeap);
-    printf("Enu2\n");
-    if(midHeap != NULL)
-      enumerate(midHeap);
-    printf("Enu3\n");
-    if(rrHeap != NULL)
-      enumerate(rrHeap);
-    */
-    //printf("Seg Fault\n");
-    //printf("Normal uptil now %d\n",alg_using);
+    
+    
     if(alg_using IS RR) {
       putBackHeap = rrHeap;
     } else if (alg_using IS MLFB) {
       if(topHeap->length ISNOT 0){
+        level = MIDL;
         putBackHeap = midHeap;
       } else {
+        //level = (midHeap->length IS 0)?RRL:MIDL;
+        level = RRL;
         putBackHeap = rrHeap;
       }
     } else if (alg_using IS SJF) {
@@ -232,17 +202,19 @@ void *serve_client() {
     
     minus = (popped_rcb->rcb_data_remain>popped_rcb->quantum)?popped_rcb->quantum:popped_rcb->rcb_data_remain;
     popped_rcb->rcb_data_remain -= minus;
-    printf("Sent %d bytes of file %s.",minus,popped_rcb->file_name);
+    printf("Sent %d bytes of file %s.\n",minus,popped_rcb->file_name);
     // pthread_mutex_unlock(&mutex);
-    if(popped_rcb->rcb_data_remain > 0)
+    if(popped_rcb->rcb_data_remain > 0){
+      if(alg_using IS MLFB)
+         popped_rcb->quantum = (level IS MIDL)? MID_QUEUE_QUANTUM : RR_QUANTUM;
       mutex_lock_enqueue(putBackHeap,popped_rcb);
-    else{
+    }else{
+      printf("File %s transfer complete\n",popped_rcb->file_name);
       memset(buffer,0,MAX_HTTP_SIZE);
-      length = sprintf(buffer,"%s finished",popped_rcb->file_name);
+      length = sprintf(buffer,"%s finished\n",popped_rcb->file_name);
       write(popped_rcb->rcb_fd,buffer,length);
       free(popped_rcb);
     }
-    
   }
 }
 
@@ -377,10 +349,8 @@ void create_RCB_init(){
 RCB *create_RCB(int fd,FILE *inputFile,char *fileName) {
   
   RCB *new_RCB = (RCB *)malloc(sizeof(RCB));
-  printf("1. <%s>\n",fileName);
   new_RCB->file_name = malloc(MAX_HTTP_SIZE);
   new_RCB->file_name = strcpy(new_RCB->file_name, fileName);
-  printf("2. <%s>\n",new_RCB->file_name);
   new_RCB->rcb_fd = fd;
   new_RCB->rcb_file = inputFile;
   new_RCB->rcb_seq_num = seq_num_c++;
@@ -445,27 +415,15 @@ int main( int argc, char **argv ) {
   
   receive_init(&num_threads);
   
-  // put into receive_init
-  //  for( ;; ) {                                       /* main loop */
-  //    network_wait();                                 /* wait for clients */
-  
-  //    for( fd = network_open(); fd >= 0; fd = network_open() ) { /* get clients */
-  //      serve_client( fd );                           /* process each client */
-  //    }
-  //  }
-  
   return EXIT_SUCCESS; // return status
 }
 
 void mutex_lock_enqueue(Heap *h, RCB *c) {
-  //printf("CK3\n");
+  
   pthread_mutex_lock(&mutex);
-  //printf("CK4\n");
-  //printf("123\nI can go here\n %d\n",c->priority);
-  //printf("%d\n\n",h->length);
-  //printf("%d 23\n\n",c->priority);
+  
   addRCB(h, c->priority, c);
-  //printf("CK5\n");
+  
   pthread_mutex_unlock(&mutex);
   sem_post(semaphore); // here is a thread can start in threads
   
@@ -473,8 +431,8 @@ void mutex_lock_enqueue(Heap *h, RCB *c) {
 
 RCB *mutex_lock_dequeue() {
   pthread_mutex_lock(&mutex);
-  RCB *ret = NULL;//= pop(h);
-  //printf("Pop CK1\n");
+  RCB *ret = NULL;
+  
   if(alg_using IS SJF) {
     ret = pop(topHeap);
   } else if (alg_using IS RR) {
@@ -488,12 +446,8 @@ RCB *mutex_lock_dequeue() {
       ret = pop(rrHeap);
     }
   }
-  //printf("Pop CK2\n");
   
- // printf("Seg Fault mutex2 ");
- // printf("%d\n",ret->priority);
   pthread_mutex_unlock(&mutex);
-//   printf("Seg Fault1234\n");
   return ret;
 }
 
