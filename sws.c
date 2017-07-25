@@ -169,12 +169,12 @@ void *serve_client() {
     abort();
   }
   for(;;){
-    printf("1. semaphore num: %d\n",(int)semaphore);
+  //  printf("1. semaphore num: %d\n",(int)semaphore);
     sem_wait(semaphore); // wait until the there is a job assigned
-    printf("2. semaphore num: %d\n",(int)semaphore);
+  //  printf("2. semaphore num: %d\n",(int)semaphore);
     //pthread_mutex_lock(&outerMutex);
     
-    printf("CONTIGUOUS 1\n");
+   // printf("CONTIGUOUS 1\n");
     if(alg_using IS RR) {
       putBackHeap = rrHeap;
     } else if (alg_using IS MLFB) {
@@ -219,7 +219,7 @@ void *serve_client() {
       free(popped_rcb);
       
     }
-    printf("CONTIGUOUS 2\n");
+   // printf("CONTIGUOUS 2\n");
     //pthread_mutex_unlock(&outerMutex);
   }
 }
@@ -337,9 +337,9 @@ void mutex_lock_enqueue(Heap *h, RCB *c) {
   addRCB(h, c->priority, c);
   
   pthread_mutex_unlock(&mutex);
-  printf("before enqueueu: %d\n",(int)semaphore);
+  //printf("before enqueueu: %d\n",(int)semaphore);
   sem_post(semaphore); // here is a thread can start in threads
-  printf("after enqueueu: %d\n",(int)semaphore);
+  //printf("after enqueueu: %d\n",(int)semaphore);
 }
 
 RCB *mutex_lock_dequeue() {
@@ -365,7 +365,7 @@ RCB *mutex_lock_dequeue() {
 }
 
 void algorithm_init(int port, char *alg_in, int num_threads) {
-  printf("%s\n",alg_in);
+ // printf("%s\n",alg_in);
   
   if( strcmp(alg_in,"SJF") == 0 || strcmp(alg_in,"sjf") == 0){
     
@@ -384,12 +384,10 @@ void algorithm_init(int port, char *alg_in, int num_threads) {
     midHeap = malloc(sizeof(Heap));
     rrHeap = malloc(sizeof(Heap));
     
-    
     init_heap(topHeap);
     init_heap(midHeap);
     init_heap(rrHeap);
   }else {
-    
     printf("What algorithm is that?");
     exit(0);
   }
