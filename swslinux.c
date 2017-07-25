@@ -43,9 +43,9 @@ int alg_using = 0;
 int seq_num_c = 0; // cumulative sequence number
 
 
+
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t outerMutex = PTHREAD_MUTEX_INITIALIZER;
-sem_t *semaphore;
+sem_t semaphore;
 
 void algorithm_init(int,char *, int);
 void receive_init(int *number_of_threads);
@@ -76,7 +76,7 @@ void *serve_client();
 
 void *serve_client_init( void *fdp ) {
   
-  //sem_wait(semaphore); // wait until the there is a job assigned
+  //sem_wait(&semaphore); // wait until the there is a job assigned
   int fd = *(int *)fdp;
   char *buffer = NULL;                              /* request buffer */
   char *req = NULL;                                 /* ptr to req file */
@@ -169,12 +169,10 @@ void *serve_client() {
     abort();
   }
   for(;;){
-    printf("1. semaphore num: %d\n",(int)semaphore);
-    sem_wait(semaphore); // wait until the there is a job assigned
-    printf("2. semaphore num: %d\n",(int)semaphore);
-    //pthread_mutex_lock(&outerMutex);
+    sem_wait(&semaphore); // wait until the there is a job assigned
+
     
-    printf("CONTIGUOUS 1\n");
+    
     if(alg_using IS RR) {
       putBackHeap = rrHeap;
     } else if (alg_using IS MLFB) {
@@ -214,13 +212,9 @@ void *serve_client() {
       printf("File %s transfer complete\n",popped_rcb->file_name);
       memset(buffer,0,MAX_HTTP_SIZE);
       length = sprintf(buffer,"%s finished\n",popped_rcb->file_name);
-      
       write(popped_rcb->rcb_fd,buffer,length);
       free(popped_rcb);
-      
     }
-    printf("CONTIGUOUS 2\n");
-    //pthread_mutex_unlock(&outerMutex);
   }
 }
 
@@ -250,13 +244,14 @@ void create_RCB_init(){
       
       int *fdp = (int *) malloc(sizeof(int));
       *fdp = fd;
+      //printf("fdp: %d\n",*fdp);
       pthread_create(&t, NULL, serve_client_init, (void *)fdp);
+      //printf("Arrive Fault 2\n");
       pthread_join(t,NULL);
     }
   //  pthread_mutex_unlock(&mutex);
   }
 }
-
 
 RCB *create_RCB(int fd,FILE *inputFile,char *fileName) {
   
@@ -302,8 +297,8 @@ int main( int argc, char **argv ) {
   int port = -1;                                    /* server port # */
   //int fd;       // not needed                     /* client file descriptor */
   
-  //sem_open(&semaphore, 0, 0);         // initialize a semaphore for work when network accept
-  semaphore = sem_open("/semaphore", O_CREAT, 0644, 1);
+  //sem_open(&&semaphore, 0, 0);         // initialize a semaphor for work when network accept
+  sem_init(&semaphore,0,0);
   int num_threads = 0;
   char alg_in[5];
   
@@ -337,9 +332,8 @@ void mutex_lock_enqueue(Heap *h, RCB *c) {
   addRCB(h, c->priority, c);
   
   pthread_mutex_unlock(&mutex);
-  printf("before enqueueu: %d\n",(int)semaphore);
-  sem_post(semaphore); // here is a thread can start in threads
-  printf("after enqueueu: %d\n",(int)semaphore);
+  sem_post(&semaphore); // here is a thread can start in threads
+  
 }
 
 RCB *mutex_lock_dequeue() {

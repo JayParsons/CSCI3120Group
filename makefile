@@ -2,7 +2,7 @@
 help:
 
 sws: sws.o Priority_Heap.o network.o
-	gcc -std=c99 -o sws sws.o Priority_Heap.o network.o
+	gcc -std=c99 -lpthread -o sws sws.o Priority_Heap.o network.o
 
 sws.o: sws.c Priority_Heap.h network.h
 	gcc -std=c99 -c sws.c
@@ -18,3 +18,6 @@ main: main.o Priority_Heap.o
 
 main.o: main.c Priority_Heap.h
 	gcc -std=c99 -c main.c
+
+clean:
+	rm *.o sws
