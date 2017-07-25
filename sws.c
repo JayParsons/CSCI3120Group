@@ -172,7 +172,7 @@ void *serve_client() {
   //  printf("1. semaphore num: %d\n",(int)semaphore);
     sem_wait(semaphore); // wait until the there is a job assigned
   //  printf("2. semaphore num: %d\n",(int)semaphore);
-    //pthread_mutex_lock(&outerMutex);
+    pthread_mutex_lock(&outerMutex);
     
    // printf("CONTIGUOUS 1\n");
     if(alg_using IS RR) {
@@ -194,7 +194,7 @@ void *serve_client() {
       printf("Because this is the least place that can cause an error\n");
       
     }
-    
+    enumerate(rrHeap);
     popped_rcb = mutex_lock_dequeue();
     
     //length = fread(buffer,1,popped_rcb->quantum,popped_rcb->rcb_file);
@@ -220,7 +220,7 @@ void *serve_client() {
       
     }
    // printf("CONTIGUOUS 2\n");
-    //pthread_mutex_unlock(&outerMutex);
+    pthread_mutex_unlock(&outerMutex);
   }
 }
 

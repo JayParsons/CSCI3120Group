@@ -81,7 +81,7 @@ RCB *pop(Heap *h){
   
   while(!found) {
     if(lIndex < h->length && rIndex < h->length) {
-      if(((h->head)+lIndex)->priority > ((h->head)+rIndex)->priority){
+      if(((h->head)+lIndex)->priority >= ((h->head)+rIndex)->priority){
         maxChild = (h->head) [ lIndex];
         maxIndex = lIndex;
       } else {
@@ -89,14 +89,14 @@ RCB *pop(Heap *h){
         maxIndex = rIndex;
       }
       
-      if(item.priority < maxChild.priority) {
+      if(item.priority <= maxChild.priority) {
         *(h->head+maxIndex) = item;
         *(h->head+index) = maxChild;
         index = maxIndex;
       } else
         found = 1;
-    } else if (lIndex < h->length) {
-      if(item.priority < (h->head+lIndex)->priority) {
+    } else if (lIndex <= h->length) {
+      if(item.priority <= (h->head+lIndex)->priority) {
         *(h->head+index) = *(h->head+lIndex);
         *(h->head+lIndex) = item;
         index = lIndex;
@@ -116,7 +116,7 @@ void enumerate(Heap *h) {
   if(h->length == 0) return;
   
   for (int i = 0;i<h->length;i++) {
-    printf("%d ",(h->head+i)->priority);
+    printf("%d ",(h->head+i)->rcb_seq_num);
   }
   printf("\n");
   
