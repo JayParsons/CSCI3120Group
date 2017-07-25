@@ -18,7 +18,7 @@
 
 
 #define MAX_HTTP_SIZE 32*1024                 /* size of buffer to allocate */
-#define IS ==
+#define IS ==              // make things easier to read in statements
 #define ISNOT !=
 #define SJF 1
 #define RR 2
@@ -143,8 +143,7 @@ void *serve_client_init( void *fdp ) {
 }
 
 void *serve_client() {
-  char *buffer = malloc(sizeof(char) * MAX_HTTP_SIZE);
-  memset(buffer, 0, sizeof(char) * MAX_HTTP_SIZE);
+  char *buffer;
   RCB *popped_rcb;
   Heap *putBackHeap;
   int length;
@@ -156,7 +155,7 @@ void *serve_client() {
   }
   for(;;){
     sem_wait(semaphore); // wait until the there is a job assigned
-  
+    //pthread_mutex_lock(&outerMutex);
     if(alg_using IS RR) {
       putBackHeap = rrHeap;
     } else if (alg_using IS MLFB) {
@@ -176,30 +175,36 @@ void *serve_client() {
       printf("Because this is the least place that can cause an error\n");
       
     }
-   
+    
     popped_rcb = mutex_lock_dequeue();
     
     minus = (popped_rcb->rcb_data_remain>popped_rcb->quantum)?popped_rcb->quantum:popped_rcb->rcb_data_remain;
+    buffer = malloc(sizeof(char) * minus);
+    memset(buffer, 0, sizeof(char) * minus);
     popped_rcb->rcb_data_remain -= minus;
     printf("Sent %d %s.\n",minus,popped_rcb->file_name);
     //fread();
     fread(buffer, 1, minus, popped_rcb->rcb_file);
-    printf("%s",buffer);
+    //printf("%s",buffer);
     
     if(popped_rcb->rcb_data_remain > 0){
       if(alg_using IS MLFB)
          popped_rcb->quantum = (level IS MIDL)? MID_QUEUE_QUANTUM : RR_QUANTUM;
+      if(alg_using ISNOT SJF)
+        popped_rcb->priority += seq_num_c+1;
       mutex_lock_enqueue(putBackHeap,popped_rcb);
     }else{
       printf("File %s transfer complete\n",popped_rcb->file_name);
       memset(buffer,0,MAX_HTTP_SIZE);
       length = sprintf(buffer,"%s finished\n",popped_rcb->file_name);
-      
+      pthread_mutex_lock(&mutex);
       write(popped_rcb->rcb_fd,buffer,length);
+      pthread_mutex_unlock(&mutex);
       close(popped_rcb->rcb_fd);
       fclose(popped_rcb->rcb_file);
       free(popped_rcb);
     }
+   // pthread_mutex_unlock(&outerMutex);
   }
 }
 
@@ -255,10 +260,10 @@ RCB *create_RCB(int fd,FILE *inputFile,char *fileName) {
     
   } else if (alg_using IS RR) {
     new_RCB->quantum = RR_QUANTUM;
-    new_RCB->priority = UNIFORM;
+    new_RCB->priority = UNIFORM+seq_num_c-1;
   } else if (alg_using IS MLFB) {
     new_RCB->quantum = TOP_QUEUE_QUANTUM;
-    new_RCB->priority = UNIFORM;
+    new_RCB->priority = UNIFORM+seq_num_c-1;
   }
   return new_RCB;
   
