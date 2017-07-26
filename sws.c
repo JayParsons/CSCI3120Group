@@ -184,7 +184,12 @@ void *serve_client() {
     popped_rcb->rcb_data_remain -= minus;
     printf("Sent %d %s.\n",minus,popped_rcb->file_name);
     //fread();
-    fread(buffer, 1, minus, popped_rcb->rcb_file);
+    length = fread(buffer, 1, minus, popped_rcb->rcb_file);
+    if(length < 0) {
+      printf("Error writing content to client\n");
+      abort();
+    }
+    write(popped_rcb->rcb_fd, buffer,length);
     printf("%s",buffer);
     
     if(popped_rcb->rcb_data_remain > 0){
