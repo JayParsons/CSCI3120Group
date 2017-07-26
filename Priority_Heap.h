@@ -17,7 +17,6 @@ typedef struct {
   int quantum; // may remove
   int priority;
   char *file_name;
-  int *level; // may change
 }RCB;
 
 typedef struct {
