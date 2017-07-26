@@ -1,5 +1,8 @@
 # CSCI3120Group
 To my teammate:
+--<update>--
+Error is reduced to minimum, minor error still occur, I no longer have faith to debug: the big picture is still on path, possible being thread issue.
+------------
 
 The project code part is 99% done, what left is commenting and the part I did not mentioned in the project menu, please notice me if you find something missing.
 

@@ -18,7 +18,7 @@
 
 
 #define MAX_HTTP_SIZE 32*1024                 /* size of buffer to allocate */
-#define IS ==              // make things easier to read in statements
+#define IS ==
 #define ISNOT !=
 #define SJF 1
 #define RR 2
@@ -52,7 +52,7 @@ void receive_init(int *number_of_threads);
 void create_RCB_init();
 RCB *create_RCB(int, FILE *, char *fileName);
 
-void mutex_lock_enqueue(Heap *,RCB *);
+void mutex_lock_enqueue(Heap *,int,RCB *);
 RCB *mutex_lock_dequeue();
 
 //void *receive(void *);// a.k.a worker function,  the function that handles all receive jobs, parameter is the interface
@@ -132,9 +132,9 @@ void *serve_client_init( void *fdp ) {
       
       RCB *new_RCB = create_RCB(fd,fin, fileName);
       if (alg_using IS RR)
-        mutex_lock_enqueue(rrHeap, new_RCB);
+        mutex_lock_enqueue(rrHeap, new_RCB->priority ,new_RCB);
       else
-        mutex_lock_enqueue(topHeap, new_RCB);
+        mutex_lock_enqueue(topHeap, new_RCB->priority ,new_RCB);
     }
   }
   free(fileName);
@@ -143,19 +143,21 @@ void *serve_client_init( void *fdp ) {
 }
 
 void *serve_client() {
-  char *buffer;
+  char *buffer = malloc(sizeof(char) * MAX_HTTP_SIZE);
+  memset(buffer, 0, sizeof(char) * MAX_HTTP_SIZE);
   RCB *popped_rcb;
   Heap *putBackHeap;
   int length;
   int level;
   int minus;
+  int passInPrio;
   if (!buffer) {
     perror("Error while allocating memory");
     abort();
   }
   for(;;){
     sem_wait(semaphore); // wait until the there is a job assigned
-    //pthread_mutex_lock(&outerMutex);
+  
     if(alg_using IS RR) {
       putBackHeap = rrHeap;
     } else if (alg_using IS MLFB) {
@@ -175,36 +177,36 @@ void *serve_client() {
       printf("Because this is the least place that can cause an error\n");
       
     }
-    
+   
     popped_rcb = mutex_lock_dequeue();
     
     minus = (popped_rcb->rcb_data_remain>popped_rcb->quantum)?popped_rcb->quantum:popped_rcb->rcb_data_remain;
-    buffer = malloc(sizeof(char) * minus);
-    memset(buffer, 0, sizeof(char) * minus);
     popped_rcb->rcb_data_remain -= minus;
     printf("Sent %d %s.\n",minus,popped_rcb->file_name);
     //fread();
     fread(buffer, 1, minus, popped_rcb->rcb_file);
-    //printf("%s",buffer);
+    printf("%s",buffer);
     
     if(popped_rcb->rcb_data_remain > 0){
       if(alg_using IS MLFB)
          popped_rcb->quantum = (level IS MIDL)? MID_QUEUE_QUANTUM : RR_QUANTUM;
-      if(alg_using ISNOT SJF)
+      if(alg_using ISNOT SJF) {
         popped_rcb->priority += seq_num_c+1;
-      mutex_lock_enqueue(putBackHeap,popped_rcb);
+        passInPrio =popped_rcb->priority;
+        popped_rcb->priority %= 1024;
+      }
+      mutex_lock_enqueue(putBackHeap,passInPrio,popped_rcb);
     }else{
       printf("File %s transfer complete\n",popped_rcb->file_name);
       memset(buffer,0,MAX_HTTP_SIZE);
       length = sprintf(buffer,"%s finished\n",popped_rcb->file_name);
-      pthread_mutex_lock(&mutex);
+      
       write(popped_rcb->rcb_fd,buffer,length);
-      pthread_mutex_unlock(&mutex);
       close(popped_rcb->rcb_fd);
       fclose(popped_rcb->rcb_file);
+      free(popped_rcb->file_name);
       free(popped_rcb);
     }
-   // pthread_mutex_unlock(&outerMutex);
   }
 }
 
@@ -247,7 +249,7 @@ RCB *create_RCB(int fd,FILE *inputFile,char *fileName) {
   new_RCB->rcb_fd = fd;
   new_RCB->rcb_file = inputFile;
   new_RCB->rcb_seq_num = seq_num_c++;
-  
+  seq_num_c %= 1024;
   fseek(new_RCB->rcb_file, 0, SEEK_END);
   int length = (int)ftell(new_RCB->rcb_file); //get file size
   rewind(new_RCB->rcb_file);
@@ -260,10 +262,10 @@ RCB *create_RCB(int fd,FILE *inputFile,char *fileName) {
     
   } else if (alg_using IS RR) {
     new_RCB->quantum = RR_QUANTUM;
-    new_RCB->priority = UNIFORM+seq_num_c-1;
+    new_RCB->priority = UNIFORM + seq_num_c;
   } else if (alg_using IS MLFB) {
     new_RCB->quantum = TOP_QUEUE_QUANTUM;
-    new_RCB->priority = UNIFORM+seq_num_c-1;
+    new_RCB->priority = UNIFORM + seq_num_c;
   }
   return new_RCB;
   
@@ -310,11 +312,11 @@ int main( int argc, char **argv ) {
   return EXIT_SUCCESS; // return status
 }
 
-void mutex_lock_enqueue(Heap *h, RCB *c) {
+void mutex_lock_enqueue(Heap *h, int p,RCB *c) {
   
   pthread_mutex_lock(&mutex);
   
-  addRCB(h, c->priority, c);
+  addRCB(h, p, c);
   
   pthread_mutex_unlock(&mutex);
   
