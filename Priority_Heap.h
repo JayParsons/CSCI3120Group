@@ -1,10 +1,13 @@
-//
-//  Heap.h
-//  
-//
-//  Created by ZhangZhiyuan on 16/07/2017.
-//
-//
+/*
+ * Date: July. 27th
+ * CSCI3120 - Operating System - Group project
+ * Priority_Heap.h
+ *
+ * Is the header file for Priority_Heap.c
+ * Is the file declares the structure of Heap, RCB, function that can operate on heap
+ * Function details see header comment in the file.
+ *
+ */
 
 #ifndef Priority_Heap_h
 #include <stdio.h>
@@ -32,4 +35,4 @@ RCB *pop(Heap *h);
 void enumerate(Heap *h);
 RCB *cpy(RCB *);
 #define Priority_Heap_h
-#endif /* Heap_h */
+#endif

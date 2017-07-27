@@ -1,10 +1,42 @@
 /*
- * File: sws.c
- * Author: Alex Brodsky
- * Purpose: This file contains the implementation of a simple web server.
- *          It consists of two functions: main() which contains the main
- *          loop accept client connections, and serve_client(), which
- *          processes each client request.
+ *
+ * Date: July. 27th
+ * CSCI3120 - Operating System - Group project
+ *
+ * sws.c
+ * usage: ./sws <port> <algorithm> <number_of_threads>
+ * Example:  ./sws 38080 SJF 8
+ * sws.c file after execution will act as a server waiting
+ * for clients. After receive the request from the user,
+ * will print the current information of sending and send
+ * to the clients.
+ * Design and logic flow:
+ *
+ *                        main
+ *                          |
+ *                          |
+ *                       receive_init()
+ *          (threads)       |            (main thread)
+ *                __________|______________________________
+ *               |                                         |
+ *       (number of threads)                         network_wait() <---------------------|
+ *         |||||||||||||||                                 |                              |
+ *          serve_client()                 create a thread for every income requests      |
+ *               |                                   |||||||||||||                        |
+ *     |--->sem_wait()                           request parsing                          |
+ *     |         |                                         |                              |
+ *     |    dequeue()                              identify file name                     |
+ *     |         |                                         |                              |
+ *     |   process quantum data                      search for file                      |
+ *     |         |                                         |                              |
+ *     |  determine put back or not                   create_RCB()                        |
+ *     |         |                                         |                              |
+ *     |_________|                                    enqueue RCB                         |
+ *                                                         |                              |
+ *                                                   rise a semaphore ____________________|
+ *
+ *
+ *
  */
 
 #include <stdio.h>
@@ -29,25 +61,23 @@
 #define RR_QUANTUM 8*1024                  // RR or MLFB
 #define UNIFORM 32                         // priority
 
-#define TOPL 1
+#define TOPL 1                             // put back heap level
 #define MIDL 2
 #define RRL 3
 #define DEFAULT -1
 
-Heap *topHeap;
-Heap *midHeap;
-Heap *rrHeap;
+Heap *topHeap;         // top heap works for MLFB, SJF
+Heap *midHeap;         // MLFB
+Heap *rrHeap;          // MLFB, RR
 
-int alg_using = 0;
+int alg_using = 0; // initialize the algorithm in use
 int seq_num_c = 0; // cumulative sequence number
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t outerMutex = PTHREAD_MUTEX_INITIALIZER;
 sem_t *semaphore;
 
 void algorithm_init(int,char *, int);
 void receive_init(int *number_of_threads);
-
 
 void create_RCB_init();
 RCB *create_RCB(int, FILE *, char *fileName);
@@ -55,10 +85,47 @@ RCB *create_RCB(int, FILE *, char *fileName);
 void mutex_lock_enqueue(Heap *,int,RCB *);
 RCB *mutex_lock_dequeue();
 
-//void *receive(void *);// a.k.a worker function,  the function that handles all receive jobs, parameter is the interface
-
 void *serve_client_init(void *);
-void *serve_client();
+void *serve_client();// a.k.a worker function,  the function that handles all receive jobs, parameter is the interface
+
+
+/* This function is where the program starts running.
+ *    The function first parses its command line parameters to determine port #
+ *    Then, it initializes, the network and enters the main loop.
+ *    The main loop waits for a client (1 or more to connect, and then processes
+ *    all clients by calling the seve_client() function for each one.
+ * Parameters:
+ *             argc : number of command line parameters (including program name
+ *             argv : array of pointers to command line parameters
+ * Returns: an integer status code, 0 for success, something else for error.
+ */
+int main( int argc, char **argv ) {
+  int port = -1;                                    /* server port # */
+  
+  semaphore = sem_open("/semaphore", O_CREAT, 0644, 1);          // initialize a semaphore for work when network accept
+  int num_threads = 0;
+  char alg_in[5];
+  
+  /* check for and process parameters */
+  if( ( argc != 4 ) ||
+     ( sscanf( argv[1], "%d", &port ) < 1 ) ||
+     ( *(strcpy(alg_in, argv[2])) < 1 )     ||                   // decide the algorithm
+     ( sscanf(argv[3], "%d", &num_threads) < 1)
+     ) {
+    printf( "usage: sws <port> <algrithm> <number of threads>\n" );
+    return 0;
+  }
+  algorithm_init(port,alg_in,num_threads);                      // initialize alogrithm
+  
+  network_init( port );                                         /* init network module */
+  printf("\nServer all Green! //initialization complete");
+  printf("\nStart waiting for clients request\n\n");
+  
+  receive_init(&num_threads);
+  
+  return EXIT_SUCCESS; // return status
+}
+
 
 
 /* This function takes a file handle to a client, reads in the request,
@@ -113,7 +180,7 @@ void *serve_client_init( void *fdp ) {
     close(fd);
   } else {                                          /* if so, open file */
     req++;                                          /* skip leading / */
-    printf("Request for file '%s' admitted.\n", req); // required T2 3)
+    printf("Request for file '%s' admitted.\n", req); // get request and file name from client
     
     length = sprintf(fileName,"%s",req);
     //write(popped_rcb->rcb_fd,fileName,length);
@@ -130,8 +197,8 @@ void *serve_client_init( void *fdp ) {
       
       write( fd, buffer, len );
       
-      RCB *new_RCB = create_RCB(fd,fin, fileName);
-      if (alg_using IS RR)
+      RCB *new_RCB = create_RCB(fd,fin, fileName);            // create a RCB
+      if (alg_using IS RR)                                    // enqueue to coresponding queue
         mutex_lock_enqueue(rrHeap, new_RCB->priority ,new_RCB);
       else
         mutex_lock_enqueue(topHeap, new_RCB->priority ,new_RCB);
@@ -142,11 +209,20 @@ void *serve_client_init( void *fdp ) {
   return 0;
 }
 
+/**
+ * serve_client function will is created into thread and
+ * wait for a semaphore value. Once semaphore is rose,
+ * function pop a RCB from a heap and start sending
+ * If there are data remain not send, enqueue back to
+ * a heap; or no data left, then free the RCB
+ *
+ * @return *num_thread: int   number of threads
+ */
 void *serve_client() {
-  char *buffer = malloc(sizeof(char) * MAX_HTTP_SIZE);
-  memset(buffer, 0, sizeof(char) * MAX_HTTP_SIZE);
-  RCB *popped_rcb;
-  Heap *putBackHeap;
+  char *buffer = malloc(sizeof(char) * MAX_HTTP_SIZE);         // buffer just work as a multiple usage buffer
+  memset(buffer, 0, sizeof(char) * MAX_HTTP_SIZE);             // always write/send immediately after assigned value
+  RCB *popped_rcb;                                             // the RCB that is poped
+  Heap *putBackHeap;                                           // the next heap it is going to be enqueued
   int length;
   int level;
   int minus;
@@ -156,16 +232,15 @@ void *serve_client() {
     abort();
   }
   for(;;){
-    sem_wait(semaphore); // wait until the there is a job assigned
+    sem_wait(semaphore);                                       // wait until the there is a job assigned
   
-    if(alg_using IS RR) {
+    if(alg_using IS RR) {                                      // identify which queue going to put back next
       putBackHeap = rrHeap;
     } else if (alg_using IS MLFB) {
       if(topHeap->length ISNOT 0){
         level = MIDL;
         putBackHeap = midHeap;
       } else {
-  
         level = RRL;
         putBackHeap = rrHeap;
       }
@@ -178,21 +253,20 @@ void *serve_client() {
       
     }
    
-    popped_rcb = mutex_lock_dequeue();
+    popped_rcb = mutex_lock_dequeue();                        // pop, get rcb
     
-    minus = (popped_rcb->rcb_data_remain>popped_rcb->quantum)?popped_rcb->quantum:popped_rcb->rcb_data_remain;
+    minus = (popped_rcb->rcb_data_remain>popped_rcb->quantum)?popped_rcb->quantum:popped_rcb->rcb_data_remain; // identify the length it is going to reduce
     popped_rcb->rcb_data_remain -= minus;
     printf("Sent %d %s.\n",minus,popped_rcb->file_name);
-    //fread();
-    length = fread(buffer, 1, minus, popped_rcb->rcb_file);
+    length = fread(buffer, 1, minus, popped_rcb->rcb_file);   // read file
     if(length < 0) {
       printf("Error writing content to client\n");
       abort();
     }
-    write(popped_rcb->rcb_fd, buffer,length);
+    write(popped_rcb->rcb_fd, buffer,length);                 // write to client
     printf("%s",buffer);
     
-    if(popped_rcb->rcb_data_remain > 0){
+    if(popped_rcb->rcb_data_remain > 0){                      // enqueue only if there is no data remain needs to be sent
       if(alg_using IS MLFB)
          popped_rcb->quantum = (level IS MIDL)? MID_QUEUE_QUANTUM : RR_QUANTUM;
       if(alg_using ISNOT SJF) {
@@ -201,7 +275,7 @@ void *serve_client() {
         popped_rcb->priority %= 1024;
       }
       mutex_lock_enqueue(putBackHeap,passInPrio,popped_rcb);
-    }else{
+    }else{                                                    // else free the RCB
       printf("File %s transfer complete\n",popped_rcb->file_name);
       memset(buffer,0,MAX_HTTP_SIZE);
       length = sprintf(buffer,"%s finished\n",popped_rcb->file_name);
@@ -215,7 +289,14 @@ void *serve_client() {
   }
 }
 
-
+/**
+ * receive_init() function is the first initialization
+ * that create many threads to semaphore wait for the
+ * input rcb, and start the function that is wait for
+ * sending RCBs
+ *
+ * @return *num_thread: int   number of threads
+ */
 void receive_init(int *num_threads) {
   pthread_t CCT[*num_threads]; // client-connect thread
   for (int i = 0; i < *num_threads; i++)
@@ -227,27 +308,36 @@ void receive_init(int *num_threads) {
     pthread_join(CCT[i], NULL); // for a successful join back of all threads
 }
 
-
+/**
+ * create_RCB_init function create an infinite loop that
+ * wait for network and put into another thread and receive
+ *
+ * @return none
+ */
 void create_RCB_init(){
   int fd = 0;
-  
   for(;;) {
     network_wait();
     for (fd = network_open(); fd >= 0; fd = network_open()) {
       pthread_t t ;
-      
       int *fdp = (int *) malloc(sizeof(int));
       *fdp = fd;
       pthread_create(&t, NULL, serve_client_init, (void *)fdp);
       pthread_join(t,NULL);
     }
-
   }
 }
 
-
-RCB *create_RCB(int fd,FILE *inputFile,char *fileName) {
-  
+/**
+ * create_RCB function takes in enough information to
+ * encapsulate a RCB struct and return the object.
+ *
+ * @param fd: int           file descriptor
+ * @param *inputFile: FILE  pointer to file
+ * @param *fileName: char   file name
+ * @return the recutrn rcb
+ */
+RCB *create_RCB(int fd, FILE *inputFile, char *fileName) {
   RCB *new_RCB = (RCB *)malloc(sizeof(RCB));
   new_RCB->file_name = malloc(MAX_HTTP_SIZE);
   new_RCB->file_name = strcpy(new_RCB->file_name, fileName);
@@ -264,7 +354,6 @@ RCB *create_RCB(int fd,FILE *inputFile,char *fileName) {
   if(alg_using IS SJF){
     new_RCB->quantum = length;
     new_RCB->priority = length;
-    
   } else if (alg_using IS RR) {
     new_RCB->quantum = RR_QUANTUM;
     new_RCB->priority = UNIFORM + seq_num_c;
@@ -273,66 +362,33 @@ RCB *create_RCB(int fd,FILE *inputFile,char *fileName) {
     new_RCB->priority = UNIFORM + seq_num_c;
   }
   return new_RCB;
-  
 }
 
-/* This function is where the program starts running.
- *    The function first parses its command line parameters to determine port #
- *    Then, it initializes, the network and enters the main loop.
- *    The main loop waits for a client (1 or more to connect, and then processes
- *    all clients by calling the seve_client() function for each one.
- * Parameters:
- *             argc : number of command line parameters (including program name
- *             argv : array of pointers to command line parameters
- * Returns: an integer status code, 0 for success, something else for error.
+/**
+ * implementation base on heap function addRCB.
+ * Adding mutex lock prevent from the race condition
+ *
+ * @param *h: Heap         Target hep to add
+ * @param p: int           Priority
+ * @param *c: RCB          RCB object
+ * @return none
  */
-int main( int argc, char **argv ) {
-  int port = -1;                                    /* server port # */
-  //int fd;       // not needed                     /* client file descriptor */
-  
-  //sem_open(&semaphore, 0, 0);         // initialize a semaphore for work when network accept
-  semaphore = sem_open("/semaphore", O_CREAT, 0644, 1);
-  int num_threads = 0;
-  char alg_in[5];
-  
-  /* check for and process parameters */
-  if( ( argc != 4 ) ||
-     ( sscanf( argv[1], "%d", &port ) < 1 ) ||
-     ( *(strcpy(alg_in, argv[2])) < 1 )     ||    // decide the algorithm
-     ( sscanf(argv[3], "%d", &num_threads) < 1)
-     ) {
-    printf( "usage: sws <port> <algrithm> <number of threads>\n" );
-    return 0;
-  }
-  
-  algorithm_init(port,alg_in,num_threads);
-  
-  network_init( port );                             /* init network module */
-  printf("\nServer all Green! //initialization complete");
-  printf("\nStart waiting for clients request\n\n");
-  
-  
-  receive_init(&num_threads);
-  
-  return EXIT_SUCCESS; // return status
-}
-
 void mutex_lock_enqueue(Heap *h, int p,RCB *c) {
-  
-  pthread_mutex_lock(&mutex);
-  
+  pthread_mutex_lock(&mutex);  
   addRCB(h, p, c);
-  
   pthread_mutex_unlock(&mutex);
-  
-  sem_post(semaphore); // here is a thread can start in threads
-  
+  sem_post(semaphore);                          // rise a semaphore, start send file
 }
 
+/**
+ * implementation base on heap function pop.
+ * Adding mutex lock prevent from the race condition
+ *
+ * @return the recutrn rcb
+ */
 RCB *mutex_lock_dequeue() {
   pthread_mutex_lock(&mutex);
   RCB *ret = NULL;
-  
   if(alg_using IS SJF) {
     ret = pop(topHeap);
   } else if (alg_using IS RR) {
@@ -346,31 +402,34 @@ RCB *mutex_lock_dequeue() {
       ret = pop(rrHeap);
     }
   }
-  
   pthread_mutex_unlock(&mutex);
   return ret;
 }
 
+/**
+ * algorithm_init function takes in several information and print
+ * out. Information includes port number, algorithm abbreviation,
+ * and the number of thread
+ *
+ * @param port: int        integer port number
+ * @param *alg_in: char    command line argument about algorithm
+ * @param num_thread: int  number of threads
+ * @return none
+ */
 void algorithm_init(int port, char *alg_in, int num_threads) {
- // printf("%s\n",alg_in);
-  
   if( strcmp(alg_in,"SJF") == 0 || strcmp(alg_in,"sjf") == 0){
-    
     alg_using = SJF;
     topHeap = malloc(sizeof(Heap));
     init_heap(topHeap);
   } else if( strcmp(alg_in,"RR") == 0 || strcmp(alg_in,"rr") == 0 ){
-    
     alg_using = RR;
     rrHeap = malloc(sizeof(Heap));
     init_heap(rrHeap);
   }else if( strcmp(alg_in,"MLFB") == 0 || strcmp(alg_in,"mlfb") == 0){
-    
     alg_using = MLFB;
     topHeap = malloc(sizeof(Heap));
     midHeap = malloc(sizeof(Heap));
     rrHeap = malloc(sizeof(Heap));
-    
     init_heap(topHeap);
     init_heap(midHeap);
     init_heap(rrHeap);
@@ -383,8 +442,5 @@ void algorithm_init(int port, char *alg_in, int num_threads) {
   if(alg_using IS SJF)  printf("Shortest Job First");
   if(alg_using IS MLFB)printf("Multilevel Feedback");
   if(alg_using IS RR)printf("Round Robin");
-  
   printf(" on port: %d, with %d threads using\n",port,num_threads);
-  
 }
-
